@@ -6,3 +6,4 @@ gunicorn
 spacy
 textstat
 wordfreq
+requests

@@ -74,6 +74,7 @@ The app also keeps a **History** of your past explanations so you can revisit th
 - 🎚️ **3 Explanation Levels** — Age 5, Age 10, Teen — each with a tailored system prompt
 - 🕓 **Explanation History** — Revisit your past queries anytime
 - 🔬 **NLP Analysis** — Extracts jargon and named entities from your input and checks that the explanation matches the chosen reading level
+- 📚 **RAG Grounding** — Short topics are grounded in the best-matching Wikipedia article (retrieved, chunked and ranked with TF-IDF) before Gemini explains them, with a source link
 - ⚡ **Fast Results** — Explanations generated in seconds
 - 📱 **Fully Responsive** — Clean experience on mobile and desktop
 - 🐳 **Dockerized** — Runs consistently anywhere with Docker
@@ -90,6 +91,7 @@ The app also keeps a **History** of your past explanations so you can revisit th
 | **Backend** | Python · Flask · Flask-CORS |
 | **AI Engine** | Google Gemini API (`gemini-flash-latest`) |
 | **NLP** | spaCy (`en_core_web_sm`) · textstat · wordfreq |
+| **RAG** | Wikipedia API · custom TF-IDF + cosine similarity retrieval |
 | **Config** | python-dotenv |
 | **Containerization** | Docker |
 | **Deployment** | Render |
@@ -224,6 +226,26 @@ Code lives in [`backend/nlp_utils.py`](backend/nlp_utils.py). Grade targets are 
 
 ---
 
+## 📚 RAG Pipeline
+
+```
+topic (≤ 12 words) → Wikipedia search → plain-text article → chunk by paragraph
+                  → TF-IDF vectors → cosine similarity vs. the topic → top 3 chunks
+                  → added to the Gemini prompt as reference → explanation + source link
+```
+
+| Step | What happens |
+|------|--------------|
+| Retrieve | The Wikipedia API returns the best-matching article as plain text (references and "See also" are cut) |
+| Chunk | Paragraphs are grouped into chunks of about 100 words |
+| Rank | Each chunk and the topic become TF-IDF vectors; chunks are ordered by cosine similarity, and weak matches (below 0.05) are dropped |
+| Augment | The top chunks are put in the prompt as reference text, with an instruction to simplify and not copy |
+| Fallback | If the input is long (you supplied your own text), nothing matches, or Wikipedia is slow or down, Brainsplain answers exactly as before |
+
+The retrieval is implemented from scratch in [`backend/rag.py`](backend/rag.py) (no vector database), with offline tests in [`backend/test_rag.py`](backend/test_rag.py): `cd backend && pytest`.
+
+---
+
 ## 📡 API Reference
 
 ### `POST /api/explain`
@@ -244,6 +266,11 @@ Code lives in [`backend/nlp_utils.py`](backend/nlp_utils.py). Grade targets are 
     "terms": ["protocol", "router"],
     "entities": ["ARPANET"],
     "readability": { "grade": 5.2, "target": 6, "fits": true }
+  },
+  "rag": {
+    "used": true,
+    "title": "Internet",
+    "url": "https://en.wikipedia.org/wiki/Internet"
   }
 }
 ```

@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
 from nlp_utils import analyze_input, readability
+from rag import retrieve, build_prompt
 
 # Load environment variables
 load_dotenv()
@@ -57,13 +58,13 @@ def explain_topic():
             system_instruction=system_instruction
         )
         
-        response = model.generate_content(
-            f"Please explain this: {topic}"
-        )
+        context = retrieve(topic)  # RAG: grounding text from Wikipedia, or None
+        response = model.generate_content(build_prompt(topic, context))
         explanation = response.text
         return jsonify({
             "explanation": explanation,
-            "nlp": {**analyze_input(topic), "readability": readability(explanation, level)}
+            "nlp": {**analyze_input(topic), "readability": readability(explanation, level)},
+            "rag": {"used": True, "title": context["title"], "url": context["url"]} if context else {"used": False}
         })
 
     except Exception as e:

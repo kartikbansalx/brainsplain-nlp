@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.addEventListener('click', () => {
                 topicInput.value = entry.topic;
                 showExplanation(entry.explanation, entry.level);
-                showNlp(entry.nlp);
+                showNlp(entry.nlp, entry.rag);
                 toggleHistory(); // Close drawer
             });
             historyList.appendChild(div);
@@ -151,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const nlpPanel = document.getElementById('nlp-panel');
 
-    const showNlp = (nlp) => {
+    const showNlp = (nlp, rag) => {
         nlpPanel.innerHTML = '';
         nlpPanel.classList.toggle('hidden', !nlp);
         if (!nlp) return;
@@ -168,6 +168,16 @@ document.addEventListener('DOMContentLoaded', () => {
             r.fits ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800');
         nlp.terms.forEach(t => add(`🔑 ${t}`, 'bg-primary-container/40 text-primary'));
         nlp.entities.forEach(e => add(`📍 ${e}`, 'bg-tertiary-container/40 text-tertiary'));
+
+        if (rag && rag.used && rag.url.startsWith('https://en.wikipedia.org/')) {
+            const a = document.createElement('a');
+            a.textContent = `📚 Grounded in Wikipedia: ${rag.title}`;
+            a.href = rag.url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.className = 'px-3 py-1 rounded-full text-xs font-bold bg-surface-container text-on-surface hover:underline';
+            nlpPanel.appendChild(a);
+        }
     };
 
     const showError = (msg) => {
@@ -198,7 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showError(data.error || 'Something went wrong.');
             } else {
                 showExplanation(data.explanation, currentLevel);
-                showNlp(data.nlp);
+                showNlp(data.nlp, data.rag);
                 
                 // Save to history
                 saveToHistory({
@@ -206,6 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     level: currentLevel,
                     explanation: data.explanation,
                     nlp: data.nlp,
+                    rag: data.rag,
                     timestamp: new Date().toLocaleDateString()
                 });
             }
