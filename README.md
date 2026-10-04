@@ -73,6 +73,7 @@ The app also keeps a **History** of your past explanations so you can revisit th
 - 🧠 **AI-Powered** — Google Gemini generates smart, contextual simplifications
 - 🎚️ **3 Explanation Levels** — Age 5, Age 10, Teen — each with a tailored system prompt
 - 🕓 **Explanation History** — Revisit your past queries anytime
+- 🔬 **NLP Analysis** — Extracts jargon and named entities from your input and checks that the explanation matches the chosen reading level
 - ⚡ **Fast Results** — Explanations generated in seconds
 - 📱 **Fully Responsive** — Clean experience on mobile and desktop
 - 🐳 **Dockerized** — Runs consistently anywhere with Docker
@@ -88,6 +89,7 @@ The app also keeps a **History** of your past explanations so you can revisit th
 | **Frontend** | HTML, CSS, JavaScript |
 | **Backend** | Python · Flask · Flask-CORS |
 | **AI Engine** | Google Gemini API (`gemini-flash-latest`) |
+| **NLP** | spaCy (`en_core_web_sm`) · textstat · wordfreq |
 | **Config** | python-dotenv |
 | **Containerization** | Docker |
 | **Deployment** | Render |
@@ -136,6 +138,9 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
+# 3b. Download the spaCy English model
+python -m spacy download en_core_web_sm
+
 # 4. Create your .env file
 echo "Gemini_API_KEY=your_actual_api_key_here" > .env
 
@@ -174,7 +179,7 @@ Open **http://localhost:5000** in your browser. 🎉
 
 | Setting | Value |
 |---------|-------|
-| **Build Command** | `pip install -r backend/requirements.txt` |
+| **Build Command** | `pip install -r backend/requirements.txt && python -m spacy download en_core_web_sm` |
 | **Start Command** | `python backend/app.py` |
 | **Environment Variable** | `Gemini_API_KEY` → your key |
 
@@ -200,6 +205,25 @@ Set your key only via Render's **Environment** tab in the dashboard — not in y
 
 ---
 
+## 🔬 NLP Pipeline
+
+```
+input text → tokenize → POS tag → drop stop words → lemmatize → keep rare words → key terms
+                     └→ named entity recognition → entities
+
+Gemini output → strip emojis → Flesch-Kincaid grade → compare with level target → "Level fit" badge
+```
+
+| Step | Technique | Why |
+|------|-----------|-----|
+| Key terms | spaCy POS tagging + lemmatization + stop-word removal, then a word-frequency (Zipf) filter via `wordfreq` | Nouns that are rare in everyday English are the likely jargon |
+| Entities | spaCy NER | Surfaces people, places and organisations in the input |
+| Level fit | Flesch-Kincaid grade (`textstat`) vs. a per-level target | Checks the LLM actually followed the Age 5 / Age 10 / Teen instruction |
+
+Code lives in [`backend/nlp_utils.py`](backend/nlp_utils.py). Grade targets are starting values and are meant to be tuned.
+
+---
+
 ## 📡 API Reference
 
 ### `POST /api/explain`
@@ -215,7 +239,12 @@ Set your key only via Render's **Environment** tab in the dashboard — not in y
 **Response:**
 ```json
 {
-  "explanation": "Imagine the internet is like a giant post office... 📬"
+  "explanation": "Imagine the internet is like a giant post office... 📬",
+  "nlp": {
+    "terms": ["protocol", "router"],
+    "entities": ["ARPANET"],
+    "readability": { "grade": 5.2, "target": 6, "fits": true }
+  }
 }
 ```
 

@@ -112,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.addEventListener('click', () => {
                 topicInput.value = entry.topic;
                 showExplanation(entry.explanation, entry.level);
+                showNlp(entry.nlp);
                 toggleHistory(); // Close drawer
             });
             historyList.appendChild(div);
@@ -148,10 +149,32 @@ document.addEventListener('DOMContentLoaded', () => {
         explanationLevelText.textContent = level;
     };
 
+    const nlpPanel = document.getElementById('nlp-panel');
+
+    const showNlp = (nlp) => {
+        nlpPanel.innerHTML = '';
+        nlpPanel.classList.toggle('hidden', !nlp);
+        if (!nlp) return;
+
+        const add = (text, cls) => {
+            const el = document.createElement('span');   // textContent = no XSS
+            el.textContent = text;
+            el.className = `px-3 py-1 rounded-full text-xs font-bold ${cls}`;
+            nlpPanel.appendChild(el);
+        };
+
+        const r = nlp.readability;
+        add(`${r.fits ? '✅ Level fit' : '⚠️ Too complex'} · grade ${r.grade} (target ≤ ${r.target})`,
+            r.fits ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800');
+        nlp.terms.forEach(t => add(`🔑 ${t}`, 'bg-primary-container/40 text-primary'));
+        nlp.entities.forEach(e => add(`📍 ${e}`, 'bg-tertiary-container/40 text-tertiary'));
+    };
+
     const showError = (msg) => {
         emptyState.classList.add('hidden');
         explanationContainer.classList.remove('hidden');
         resultText.innerHTML = `<span class="text-error font-bold">${msg}</span>`;
+        showNlp(null);
         explanationLevelText.textContent = 'Error';
     };
 
@@ -175,12 +198,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 showError(data.error || 'Something went wrong.');
             } else {
                 showExplanation(data.explanation, currentLevel);
+                showNlp(data.nlp);
                 
                 // Save to history
                 saveToHistory({
                     topic,
                     level: currentLevel,
                     explanation: data.explanation,
+                    nlp: data.nlp,
                     timestamp: new Date().toLocaleDateString()
                 });
             }
