@@ -1,4 +1,3 @@
-
 flask
 flask-cors
 google-generativeai
@@ -10,5 +9,8 @@ textstat
 wordfreq
 requests
 
-sentence-transformers==3.4.1
+# Sentence Transformers with its ONNX Runtime CPU backend.
+sentence-transformers[onnx]==5.7.0
+
+# Persistent local vector database.
 chromadb==1.5.9
