@@ -28,9 +28,13 @@ DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_COLLECTION = "brainsplain_wikipedia"
 DEFAULT_ONNX_PATH = BASE_DIR / "models" / "all-MiniLM-L6-v2-onnx"
 
-_db_path = Path(os.environ.get("CHROMA_DB_PATH", str(BASE_DIR / "chroma_db")))
+_db_path = Path(
+    os.environ.get("CHROMA_DB_PATH", "/tmp/brainsplain_chroma_db")
+).expanduser()
+
 if not _db_path.is_absolute():
     _db_path = (BASE_DIR / _db_path).resolve()
+
 DEFAULT_DB_PATH = str(_db_path)
 
 MIN_SIMILARITY = float(os.environ.get("RAG_MIN_SIMILARITY", "0.20"))
@@ -79,8 +83,27 @@ def get_collection():
     """Create/reuse the persistent cosine-similarity ChromaDB collection."""
     import chromadb
 
-    print(f"Opening ChromaDB collection at {DEFAULT_DB_PATH}")
-    client = chromadb.PersistentClient(path=DEFAULT_DB_PATH)
+    db_path = Path(DEFAULT_DB_PATH)
+
+    # Ensure the database directory exists.
+    db_path.mkdir(parents=True, exist_ok=True)
+
+    # Verify write access before opening ChromaDB.
+    test_file = db_path / ".brainsplain_write_test"
+
+    try:
+        test_file.write_text("ok", encoding="utf-8")
+        test_file.unlink(missing_ok=True)
+    except OSError as exc:
+        raise PermissionError(
+            f"Cannot write to ChromaDB directory: {db_path}. "
+            f"Check CHROMA_DB_PATH permissions. Original error: {exc}"
+        ) from exc
+
+    print(f"Opening ChromaDB collection at {db_path}")
+
+    client = chromadb.PersistentClient(path=str(db_path))
+
     return client.get_or_create_collection(
         name=DEFAULT_COLLECTION,
         metadata={"hnsw:space": "cosine"},
@@ -173,7 +196,7 @@ def _encode(texts):
 
 
 def index_article(article, chunks):
-    """Persist chunks, refreshing an article index only if its text changes."""
+    """Persist chunks in small batches, refreshing changed articles."""
     if not chunks:
         return None
 
@@ -185,6 +208,7 @@ def index_article(article, chunks):
         where={"article_key": article_key},
         include=["metadatas"],
     )
+
     existing_ids = existing.get("ids") or []
     existing_metadata = existing.get("metadatas") or []
 
@@ -197,6 +221,49 @@ def index_article(article, chunks):
         )
     ):
         return article_key
+
+    # Remove outdated chunks.
+    if existing_ids:
+        collection.delete(where={"article_key": article_key})
+
+    # Process a small number of chunks at a time.
+    batch_size = max(1, min(EMBEDDING_BATCH_SIZE, 8))
+
+    for start in range(0, len(chunks), batch_size):
+        batch_chunks = chunks[start:start + batch_size]
+
+        vectors = _encode(batch_chunks).tolist()
+
+        ids = [
+            hashlib.sha256(
+                f"{article_key}:{source_hash}:{start + i}".encode("utf-8")
+            ).hexdigest()
+            for i in range(len(batch_chunks))
+        ]
+
+        metadatas = [
+            {
+                "article_key": article_key,
+                "source_hash": source_hash,
+                "title": article["title"],
+                "url": article["url"],
+                "chunk_index": start + i,
+            }
+            for i in range(len(batch_chunks))
+        ]
+
+        collection.upsert(
+            ids=ids,
+            documents=batch_chunks,
+            embeddings=vectors,
+            metadatas=metadatas,
+        )
+
+        # Release batch references before processing the next batch.
+        del vectors
+        del batch_chunks
+
+    return article_key
 
     # Refresh stale chunks if the Wikipedia article has changed.
     if existing_ids:
