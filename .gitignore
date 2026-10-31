@@ -9,3 +9,5 @@ __pycache__/
 # Persistent local vector database
 chroma_db/
 backend/chroma_db/
+backend/models/
+models/
