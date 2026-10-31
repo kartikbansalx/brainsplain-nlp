@@ -8,3 +8,7 @@ __pycache__
 chroma_db
 backend/chroma_db
 .pytest_cache
+backend/models/
+backend/chroma_db/
+models/
+chroma_db/
