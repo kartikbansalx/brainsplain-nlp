@@ -1,0 +1,11 @@
+.env
+*.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Persistent local vector database
+chroma_db/
+backend/chroma_db/

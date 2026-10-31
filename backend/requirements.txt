@@ -1,0 +1,11 @@
+flask
+flask-cors
+google-generativeai
+python-dotenv
+gunicorn
+spacy
+textstat
+wordfreq
+requests
+sentence-transformers>=3.0,<6.0
+chromadb>=0.5,<2.0
